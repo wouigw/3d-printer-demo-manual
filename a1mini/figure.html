@@ -1,0 +1,846 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>拓竹 A1 mini 使用教程</title><style>
+@media (max-width:560px){
+  body{align-items:stretch!important}
+  .stage{width:100%!important;max-width:100%!important;min-width:0!important;overflow:hidden}
+  #fig{max-width:100%!important}
+  .actions{display:grid!important;grid-template-columns:1fr 1fr!important;gap:6px!important;width:100%!important;max-width:none!important;margin:6px 0 4px!important}
+  .actions .stepwrap{width:100%!important;min-width:0!important}
+  .actions .act{width:100%!important;min-width:0!important;text-align:center;font-size:12px!important;padding:5px 8px!important;white-space:normal!important}
+  .stats{display:flex!important;flex-direction:row!important;flex-wrap:wrap!important;justify-content:flex-start!important;gap:14px!important;width:100%!important;margin:2px 0 6px!important}
+  .stats .stat{text-align:left}
+  .stats .stat .v{font-size:22px!important}
+}
+</style>
+</head><body>
+<script src="core.js"></script>
+<script>
+(function(){
+'use strict';
+/* ============================================================
+   拓竹 Bambu Lab A1 mini — 使用教程（Colorfigures）
+   比例 1 单位 = 5 mm。x = 深度（正面 x=63），y = 宽度（0 是 Z 立柱一侧），z 向上。
+   机身 347×315×365 mm → 63 × 69 × 73 单位；成型 180³ mm → 36³ 单位。
+
+   真实结构与运动（资料见 notes.md）：
+   · Y 轴：热床托架沿水平导轨前后走（本图 x 方向），同步带由尾部 Y 电机驱动。
+   · X 轴：工具头沿悬臂横梁的线轨左右走（本图 y 方向），X 电机在右端电机罩内。
+   · Z 轴：整个龙门沿单立柱升降；Z 电机 → 联轴器 → 丝杠 → 螺母。
+   · 热床 3 点螺丝调平；喷嘴擦嘴胶条在热床左缘；吐料槽在左侧（图中固定在热床旁，简化）。
+   · 工具头：五通 → 挤出双齿轮 → 热端（散热片/热阻断器/加热块/0.4 喷嘴）；5015 双风道冷却；切刀；
+     进料霍尔板；摄像头在 X 电机罩内（朝打印区）。
+   · 调平：喷嘴逐点触碰热床 6×6=36 点，生成高度映射。
+   · 进料：PTFE 管 → 五通 → 挤出轮 → 250 ℃ 喷嘴，正常吐料即完成。
+
+   部件清单（透视用）：
+   外壳：底座下壳/上盖/后电器罩/屏幕座/Z 立柱/顶盖/横梁/X 电机罩/工具头壳/前盖/喷头罩/料盘支架
+   Z：Z 电机/联轴器/丝杠/Z 螺母/Z 线轨/抱箍
+   X：X 线轨/同步带/X 电机/带轮/张紧器/滑车
+   Y：Y 导轨/同步带/Y 电机/带轮/热床托架/3×调平弹簧
+   热床：加热板/加热线圈/磁铁/PEI 板/把手/擦嘴条/吐料槽
+   工具头：挤出电机/挤出双齿轮/进料霍尔板/切刀/五通/散热片/热阻断器/加热块/喷嘴/硅胶套/
+          热端风扇/5015 部件风扇/双风道
+   电子：主控板/电源/Wi-Fi 天线/摄像头/USB 小板/屏幕
+   耗材：料盘/PTFE 管/排线
+   ============================================================ */
+
+const MW = 63, MD = 69, MH = 73;            // 机身包围盒
+const BASE_TOP = 9, BED_TOP = 12.4, PLATE_TOP = 13.5;
+const PART_H = 16, LAYERS = 32;
+const NOZ = 20.4;                            // 喷嘴尖端到横梁中心的高度
+const G_IDLE = 47, G_TOUCH = PLATE_TOP + NOZ;
+
+const CASEM  = { l:'#f3f1e9', m:'#dcd8cd', d:'#b2ada0' };
+const GREYM  = { l:'#d2d5d2', m:'#aeb3b0', d:'#7d827f' };
+const DARKM  = { l:'#4d5255', m:'#373c3f', d:'#24282b' };
+const BEDM   = { l:'#a8adad', m:'#838888', d:'#5c6161' };
+const PLATEM = { l:'#3d4245', m:'#2e3234', d:'#1f2325' };
+const RUBB   = { l:'#3d3d3a', m:'#2c2c2a', d:'#1b1b1a' };
+const PCBM   = { l:'#2f6b4f', m:'#255740', d:'#173a2b' };
+const GOLDM  = { l:'#e8c45f', m:'#c8a23f', d:'#8e6f24' };
+const GREEN  = '#12a24a';
+const HOT    = '#ff6a2a';
+const PLAM   = { l:'#3fae66', m:'#2f8c50', d:'#1d5c33' };
+const CREAMM = { l:'#f8f4e5', m:'#e6e0cc', d:'#bfb7a0' };
+
+const CHUTE_Y0 = 59.8, CHUTE_Y1 = 65, CHUTE_X0 = 24, CHUTE_X1 = 36;
+const GRID_X = [28, 30.8, 33.6, 36.4, 39.2, 42];
+const GRID_Y = [24, 29.6, 35.2, 40.8, 46.4, 52];
+const SPOOL = { x:33, y:-7, z:46, r:21, w:12 };   // 外挂料盘：轴向前后，竖立在 Z 轴立柱后面
+
+let ui;
+const baseP = [], mechP = [], mechTop = [];
+let clipN = 0;
+
+/* ---------- helpers ---------- */
+const lerp = (a,b,t) => a + (b-a)*t;
+const v3 = (x0,y0,z0,x1,y1,z1) => [[Math.min(x0,x1),Math.min(y0,y1),Math.min(z0,z1)],[Math.max(x0,x1),Math.max(y0,y1),Math.max(z0,z1)]];
+
+function slab(x0,y0,x1,y1,z0,z1,r,m,shade=tone,w=1){
+  const A = on(PZ(z0), rrUV(x0,y0,x1,y1,r)), B = on(PZ(z1), rrUV(x0,y0,x1,y1,r));
+  let s = loft(A,B,n => shade(n,m));
+  if (facing([0,0,1])) s += fill(pd(B), shade([0,0,1],m)) + ink(pd(B), w*.8);
+  if (facing([0,0,-1])) s += fill(pd(A), shade([0,0,-1],m)) + ink(pd(A), w*.8);
+  return s + hullInk([...A,...B], w);
+}
+function putShell(b, svg){ baseP.push({ box:b, svg, shell:true }); }
+function putHard(b, svg){ baseP.push({ box:b, svg, shell:false }); }
+function putMech(b, svg){ mechP.push({ box:b, svg }); }
+function putTop(b, svg){ mechTop.push({ box:b, svg }); }
+function bxT(x0,y0,z0,x1,y1,z1,m,shade=toneI,w=.8){ putTop(v3(x0,y0,z0,x1,y1,z1), box(x0,y0,z0,x1,y1,z1,m,shade,w)); }
+
+function bxS(x0,y0,z0,x1,y1,z1,m,shade=tone,w=1){ putShell(v3(x0,y0,z0,x1,y1,z1), box(x0,y0,z0,x1,y1,z1,m,shade,w)); }
+function bxH(x0,y0,z0,x1,y1,z1,m,shade=toneI,w=.9){ putHard(v3(x0,y0,z0,x1,y1,z1), box(x0,y0,z0,x1,y1,z1,m,shade,w)); }
+function bxM(x0,y0,z0,x1,y1,z1,m,shade=toneI,w=.8){ putMech(v3(x0,y0,z0,x1,y1,z1), box(x0,y0,z0,x1,y1,z1,m,shade,w)); }
+function slS(x0,y0,x1,y1,z0,z1,r,m,shade=tone,w=1){ putShell(v3(x0,y0,z0,x1,y1,z1), slab(x0,y0,x1,y1,z0,z1,r,m,shade,w)); }
+function slH(x0,y0,x1,y1,z0,z1,r,m,shade=toneI,w=1){ putHard(v3(x0,y0,z0,x1,y1,z1), slab(x0,y0,x1,y1,z0,z1,r,m,shade,w)); }
+function slM(x0,y0,x1,y1,z0,z1,r,m,shade=toneI,w=.8){ putMech(v3(x0,y0,z0,x1,y1,z1), slab(x0,y0,x1,y1,z0,z1,r,m,shade,w)); }
+
+function cylY(y0,y1,x,z,r,m,shade=toneI,w=1,n=20){
+  const A = on(PY(y0), ellUV(x,z,r,r,n)), B = on(PY(y1), ellUV(x,z,r,r,n));
+  const plus = facing([0,1,0]), cap = plus ? B : A, cn = plus ? [0,1,0] : [0,-1,0];
+  return loft(A,B,nr => shade(nr,m)) + (vis(cn) ? fill(pd(cap), shade(cn,m)) + ink(pd(cap), w*.8) : '') + hullInk([...A,...B], w);
+}
+function discY(y,x,z,r,col){ return fill(pd(on(PY(y), ellUV(x,z,r,r,18))), col); }
+function clipPrism(pts3, inner){
+  const id = 'pp' + (++clipN);
+  const h = hull(pts3.map(p => P(p[0],p[1],p[2])));
+  return `<clipPath id="${id}"><path d="${sp(h)}"/></clipPath><g clip-path="url(#${id})">${inner}</g>`;
+}
+function wire(pts, col, w, outer){
+  const d = pd(pts, false);
+  return `<path d="${d}" fill="none" stroke="${INK}" stroke-width="${f(w+1.2)}" stroke-linecap="round" stroke-linejoin="round"/>`
+       + `<path d="${d}" fill="none" stroke="${col||'#2c2f2e'}" stroke-width="${f(w)}" stroke-linecap="round" stroke-linejoin="round"/>`;
+}
+function curve(pts, n){
+  const P2 = [];
+  for (let i=0; i<pts.length-1; i++){
+    const a = pts[Math.max(0,i-1)], b = pts[i], c = pts[i+1], d = pts[Math.min(pts.length-1,i+2)];
+    for (let j=0; j<n; j++){
+      const t = j/n, t2=t*t, t3=t2*t;
+      P2.push([0,1,2].map(k => .5*((2*b[k]) + (-a[k]+c[k])*t + (2*a[k]-5*b[k]+4*c[k]-d[k])*t2 + (-a[k]+3*b[k]-3*c[k]+d[k])*t3)));
+    }
+  }
+  P2.push(pts[pts.length-1]);
+  return P2;
+}
+function partOf(points, f0, f1){
+  const out = [], n = points.length-1, i0 = Math.floor(n*f0), i1 = Math.ceil(n*f1);
+  for (let i=i0; i<=i1; i++) out.push(points[Math.max(0,Math.min(n,i))]);
+  return out;
+}
+function boxOf(pts){ return [ [Math.min(...pts.map(p=>p[0])), Math.min(...pts.map(p=>p[1])), Math.min(...pts.map(p=>p[2]))],
+                              [Math.max(...pts.map(p=>p[0])), Math.max(...pts.map(p=>p[1])), Math.max(...pts.map(p=>p[2]))] ]; }
+
+/* ---------- labels (Chinese pills; width accounts for CJK glyphs) ---------- */
+const CNFONT = "ui-monospace,Menlo,Consolas,'Microsoft YaHei','PingFang SC',sans-serif";
+function cnTag(p3, dx, dy, text, on){
+  const u = window.LBL_U ? LBL_U() : 0, n = ((window.__ln || (window.__ln = {}))[text] || (__ln[text] = Object.keys(__ln).length + 1));
+  const k = INK_K, [X,Y] = P(p3[0],p3[1],p3[2]), fs = u ? 10*u : 8.4*k, h = u ? 17*u : fs*1.9;
+  const w = u ? h*(n > 9 ? 1.3 : 1) : text.length*fs*1.02 + fs*1.3, cx = X + dx*k, cy = Y + dy*k;
+  return `<g class="tag${on ? ' on' : ''}" data-n="${n}" data-t="${text}"><path d="M${f(X)} ${f(Y)}L${f(cx)} ${f(cy)}" fill="none" stroke="${INK}" stroke-width="1"/>`
+    + `<circle cx="${f(X)}" cy="${f(Y)}" r="${f(1.3*k)}" fill="${INK}"/>`
+    + `<rect x="${f(cx-w/2)}" y="${f(cy-h/2)}" width="${f(w)}" height="${f(h)}" rx="${f(h/2)}" fill="${on ? 'var(--accent,#f4b829)' : '#fff4d6'}" stroke="${INK}" stroke-width="1.2"/>`
+    + `<text x="${f(cx)}" y="${f(cy+fs*.35)}" font-size="${f(fs)}" text-anchor="middle" font-family="${CNFONT}" font-weight="800" letter-spacing=".02em" fill="${INK}">${u ? n : text}</text></g>`;
+}
+function cnCallouts(items, B){
+  const pts = []; for (const x of [B[0],B[1]]) for (const y of [B[2],B[3]]) for (const z of [B[4],B[5]]) pts.push(P(x,y,z));
+  const xmin = Math.min(...pts.map(p=>p[0])), xmax = Math.max(...pts.map(p=>p[0])), cx = (xmin+xmax)/2;
+  const k = INK_K, u = window.LBL_U ? LBL_U() : 0, fs = u ? 10*u : 8.4*k, hgt = u ? 17*u : fs*1.9, gap = hgt + (u ? 3*u : 3*k);
+  const L = [], R = [];
+  const svgEl = document.getElementById('fig'), vb = svgEl.viewBox.baseVal, btn = document.getElementById('btns');
+  const wMax = u ? hgt*1.3 + 12*k : Math.max(...items.map(it => it.text.length))*fs*1.02 + fs*1.5 + 12*k;
+  const roomL = xmin - vb.x >= wMax, roomR = vb.x + vb.width - xmax >= wMax;
+  for (const it of items){ const [X,Y] = P(it.at[0],it.at[1],it.at[2]); ((X < cx && roomL) || !roomR ? L : R).push({ ...it, X, Y }); }
+  let s = '';
+  const top = { [-1]: fs, [1]: fs + 30*k };
+  if (btn && svgEl.getScreenCTM()){ const r = btn.getBoundingClientRect(), q = new DOMPoint(r.right, r.bottom + 50).matrixTransform(svgEl.getScreenCTM().inverse());
+    if (q.y > 0) top[-1] = q.y + hgt; }
+  // keep the right column clear of the temperature panel and the See-through / Labels switches
+  const chrome = window.innerWidth > 560 ? (document.querySelector('.vset') || document.getElementById('stats')) : null;
+  if (chrome && svgEl.getScreenCTM()){ const r = chrome.getBoundingClientRect();
+    const q = new DOMPoint(r.right, r.bottom + 6).matrixTransform(svgEl.getScreenCTM().inverse());
+    if (q.y > 0) top[1] = Math.max(top[1], q.y + hgt); }
+  for (const [col, side] of [[L,-1],[R,1]]){
+    col.sort((a,b) => a.Y - b.Y);
+    let y = -1e9; for (const c of col){ c.py = Math.max(c.Y, y + gap, top[side]); y = c.py; }
+    const shift = col.length ? Math.max(0, col.reduce((a,c) => a + c.py - c.Y, 0)/col.length) : 0;
+    const room = col.length ? col[0].py - top[side] : 0; for (const c of col) c.py -= Math.min(shift, room);
+    for (const c of col){
+      c.n = ((window.__ln || (window.__ln = {}))[c.text] || (__ln[c.text] = Object.keys(__ln).length + 1));
+      const w = u ? hgt*(c.n > 9 ? 1.3 : 1) : c.text.length*fs*1.02 + fs*1.5;
+      let px = side < 0 ? xmin - 10*k - w/2 : xmax + 10*k + w/2;
+      px = Math.max(vb.x + w/2 + 2*k, Math.min(vb.x + vb.width - w/2 - 2*k, px));
+      const ex = px - side*w/2;
+      s += `<g class="tag${c.on ? ' on' : ''}" data-n="${c.n}" data-t="${c.text}"><path d="M${f(c.X)} ${f(c.Y)}L${f(ex - side*4*k)} ${f(c.py)}L${f(ex)} ${f(c.py)}" fill="none" stroke="${INK}" stroke-width="1"/>`
+        + `<circle cx="${f(c.X)}" cy="${f(c.Y)}" r="${f(1.4*k)}" fill="${INK}"/>`
+        + `<rect x="${f(px-w/2)}" y="${f(c.py-hgt/2)}" width="${f(w)}" height="${f(hgt)}" rx="${f(hgt/2)}" fill="${c.on ? 'var(--accent,#f4b829)' : '#fff4d6'}" stroke="${INK}" stroke-width="1.2"/>`
+        + `<text x="${f(px)}" y="${f(c.py+fs*.35)}" font-size="${f(fs)}" text-anchor="middle" font-family="${CNFONT}" font-weight="800" letter-spacing=".02em" fill="${INK}">${u ? c.n : c.text}</text></g>`;
+    }
+  }
+  return s;
+}
+
+/* ---------- desk ---------- */
+function desk(){
+  const A = on(PZ(-4), rrUV(-7,-24,78,78,5)), B = on(PZ(0), rrUV(-7,-24,78,78,5));
+  return loft(A,B,n => toneI(n, WOOD)) + fill(pd(B), WOOD.l) + ink(pd(B), 1.2) + hullInk([...A,...B], 2);
+}
+
+/* ---------- printed part: a small tugboat, layer by layer ---------- */
+function boat(st, bd, ox, oy, oz){
+  const x0 = 28, x1 = 42, y0 = 31, y1 = 45, z0 = PLATE_TOP;
+  const cy = (y0+y1)/2 + oy;
+  const top = z0 + PART_H*Math.min(1, st.prog) + oz;
+  const T = (x,y,z) => [x + bd + ox, y + oy, z + oz];
+  let s = '';
+  // hull: wide stern at the back, tapered bow at the front (x1)
+  const A = on(PX(x0), rrUV(y0, z0, y1, z0+8, 2.4));
+  const B = on(PX(x1), rrUV(y0+4, z0, y1-4, z0+6, 1.8));
+  const AW = A.map(p => T(...p)), BW = B.map(p => T(...p));
+  s += loft(AW, BW, n => toneI(n, PLAM));
+  if (facing([1,0,0])) s += fill(pd(BW), toneI([1,0,0], PLAM)) + ink(pd(BW), .8);
+  if (facing([-1,0,0])) s += fill(pd(AW), toneI([-1,0,0], PLAM)) + ink(pd(AW), .8);
+  s += hullInk([...AW,...BW], 1.4);
+  // cabin, roof, funnel
+  s += box(x0+3+bd+ox, y0+2+oy, z0+6.5+oz, x1-5+bd+ox, y1-2+oy, z0+12.5+oz, CREAMM, toneI, .8);
+  s += box(x0+2+bd+ox, y0+1+oy, z0+12.5+oz, x1-4+bd+ox, y1-1+oy, z0+13.3+oz, CREAMM, toneI, .8);
+  s += cyl(34+bd+ox, cy, z0+13.3+oz, z0+16+oz, 1.15, PLAM, toneI, .8, 14);
+  // windows
+  if (facing([1,0,0])) s += shape(on(PX(x1-5+bd+ox+.06), rectUV(y0+3+oy, z0+9.2+oz, y1-3+oy, z0+11.2+oz)), '#243632', .5);
+  if (facing([0,1,0])) s += shape(on(PY(y1-2+oy+.06), rectUV(x0+4+bd+ox, z0+9.2+oz, x1-6+bd+ox, z0+11.2+oz)), '#243632', .5);
+  // print layer lines on the cabin
+  let ln = '';
+  for (let z = z0+8.2; z < top-.2; z += .55){
+    if (z < z0+12.4){
+      if (facing([1,0,0])) ln += pd([[x1-5+bd+ox+.08, y0+2+oy, z],[x1-5+bd+ox+.08, y1-2+oy, z]], false);
+      if (facing([0,1,0])) ln += pd([[x0+3+bd+ox, y1-2+oy+.08, z],[x1-5+bd+ox, y1-2+oy+.08, z]], false);
+    }
+  }
+  if (ln) s += `<path d="${ln}" fill="none" stroke="${PLAM.d}" stroke-width=".45" opacity=".55"/>`;
+  // the layer being laid right now
+  if (st.phase === 'printing' && st.prog > 0 && st.prog < .999){
+    const zt = z0 + PART_H*st.prog + oz;
+    s += ink(pd(on(PZ(zt+.05), rrUV(x0+2+bd+ox, y0+2+oy, x1-2+bd+ox, y1-2+oy, 2))), 1.1);
+    s += fill(pd(on(PZ(zt+.06), rrUV(x0+3+bd+ox, y0+3+oy, x1-3+bd+ox, y1-3+oy, 2))), '#ffb24a', 'opacity=".35"');
+  }
+  return clipPrism([...on(PZ(z0), rectUV(x0+bd+ox, y0+oy, x1+bd+ox, y1+oy)),
+                    ...on(PZ(top), rectUV(x0+bd+ox, y0+oy, x1+bd+ox, y1+oy))], s);
+}
+
+/* ---------- scene ---------- */
+function scene(st, m){
+  window.__ln = {};
+  baseP.length = 0; mechP.length = 0; mechTop.length = 0; clipN = 0;
+  const k = ease(st.xr || 0);
+  const g = st.g, ty = st.ty, bd = st.bedX;
+  const FRONT = facing([1,0,0]), BACK = facing([-1,0,0]), LEFT = facing([0,1,0]), RIGHT = facing([0,-1,0]);
+  const UP = facing([0,0,1]);
+
+  let s = desk();
+  s += castShadow([[0,0,0],[63,0,0],[0,69,0],[63,69,0],[8,5,40],[20,17,40]], 0, boardTop(-7,-24,78,78,0,5));
+
+  /* ---------- base ---------- */
+  slS(2,2,61,67,1.2,5.6,4,CASEM);
+  slS(3,4,60,65,5.6,9,4,CASEM);
+  slS(2,3,10,66,9,12.5,3,CASEM);                      // rear electrical cover
+  slS(55,46,61,62,9,19,3,CASEM);                      // screen tower, front-left
+  // feet
+  for (const [fx,fy] of [[5,5],[5,63],[57,5],[57,63]]) bxH(fx,fy,0,fx+4,fy+4,1.4,RUBB,toneI,.6);
+  // screen: bezel + display, drawn only on the front face
+  if (FRONT){
+    let sc = shape(on(PX(61.06), rrUV(48,10.2,60,18.2,1.6)), DARKM.d, .9);
+    sc += fill(pd(on(PX(61.12), rrUV(49,10.8,59,17.6,1.1))), '#15211d');
+    sc += `<path d="${pd([[61.16,50,16.9],[61.16,58,16.9]], false)}" stroke="${GREEN}" stroke-width=".35" opacity=".7" fill="none"/>`;
+    sc += tx(61.18, 54, 15.6, 'A1 mini', 1.35, '#cfe9dc', 800);
+    sc += tx(61.18, 50.6, 13.9, '220°', 1.15, GREEN, 800) + tx(61.18, 56.2, 13.9, '60°', 1.15, GREEN, 800);
+    sc += fill(pd([[61.16,49.2,11.6],[61.16,58.4,11.6],[61.16,58.4,12.2],[61.16,49.2,12.2]]), '#2a3833');
+    const pw = 9.2*Math.max(.02, st.prog);
+    sc += fill(pd([[61.17,49.2,11.7],[61.17,49.2+pw,11.7],[61.17,49.2+pw,12.1],[61.17,49.2,12.1]]), GREEN);
+    sc += tx(61.18, 54, 9.6, 'Bambu Lab', 1.0, '#c9cfcb', 800);
+    putShell([[61,46,9],[61.5,62,19]], act('screen', sc));
+    // status LED: red without the plate, green with it
+    const led = st.plate ? GREEN : '#e2483d';
+    putHard([[61.3,59.2,18.2],[61.6,60.2,19.0]], `<circle cx="${f(P(61.5,59.7,18.6)[0])}" cy="${f(P(61.5,59.7,18.6)[1])}" r="${f(1.0*INK_K)}" fill="${led}" stroke="${INK}" stroke-width=".7"/>`);
+  }
+  // power button on the front-right deck
+  if (FRONT){
+    putShell([[61.0,10.6,6.2],[61.4,14.6,8.6]], shape(on(PX(61.06), ellUV(12.6,7.4,1.7,1.7,16)), DARKM.d, .8));
+    putHard([[61.3,19.6,6.6],[61.6,20.8,7.8]], `<circle cx="${f(P(61.45,20.2,7.2)[0])}" cy="${f(P(61.45,20.2,7.2)[1])}" r="${f(.6*INK_K)}" fill="${GREEN}"/>`);
+  }
+  // printed setup sticker on the exposed deck in front of the bed
+  if (UP){
+    let dec = ''; for (const [a,b,c,d] of [[55.5,58,30,33],[55.5,57,35,37],[55.5,59,39,41]])
+      dec += fill(pd(on(PZ(9.12), rectUV(a,c,b,d))), GREEN);
+    putTop(v3(54,27,9,61,43,9.2), `<g opacity=".6">${dec}</g>`);
+  }
+  // right-side ports (visible from the right/back)
+  if (RIGHT){
+    let ports = '';
+    ports += shape(on(PY(2.05), rrUV(30,4.3,38,6.4,1)), DARKM.d, .7);
+    ports += shape(on(PY(2.05), rrUV(40,4.5,46,6.2,1)), DARKM.d, .6);
+    ports += shape(on(PY(2.05), rrUV(48,4.5,52,6.2,.8)), DARKM.d, .6);
+    ports += `<path d="${pd([[31,2.1,5.3],[36,2.1,5.3]], false)}" stroke="${METAL.l}" stroke-width=".6" fill="none"/>`;
+    putShell([[30,2,4.2],[52,2.3,6.5]], ports);
+  }
+  // back vents + power inlet
+  if (BACK){
+    let bk = '';
+    for (let yy=22; yy<=58; yy+=4) bk += pd([[2.06,yy,10.4],[2.06,yy,12.1]], false);
+    putShell([[2,20,5],[2.4,60,12.4]], `<path d="${bk}" fill="none" stroke="${INK}" stroke-width=".8" opacity=".6"/>`
+      + shape(on(PX(2.05), rrUV(24,5.8,34,9.2,1.2)), DARKM.d, .7));
+  }
+
+  /* ---------- column + gantry ---------- */
+  slS(7.5,4.5,20.5,17.5,9,73,2.5,CASEM);
+  bxS(7,4,73,21,18,75.2,DARKM,tone,1);
+  // column side seam / label
+  if (LEFT) putShell([[20,17.55,12],[20,17.65,72]], `<path d="${pd([[10,17.6,72],[10,17.6,12]], false)}" stroke="${GREYM.d}" stroke-width=".7" opacity=".7" fill="none"/>`);
+  if (FRONT) putShell([[20.55,6,14],[20.7,16,72]], ink(pd([[20.6,7,71],[20.6,7,14]], false), .5));
+
+  // gantry bracket (moves with Z)
+  slS(8,6,22,19,g-6,g+6,2,GREYM);
+  // cantilever beam along y
+  {
+    const prof = rrUV(9, g-5, 17, g+1, 1.6);
+    const A = on(PY(14), prof), B = on(PY(64), prof);
+    let beam = loft(A,B,n => tone(n,GREYM)) + hullInk([...A,...B], 2.2);
+    if (facing([0,1,0])) beam += fill(pd(B), tone([0,1,0],GREYM)) + ink(pd(B), 1);
+    if (facing([0,-1,0])) beam += fill(pd(A), tone([0,-1,0],GREYM)) + ink(pd(A), 1);
+    putShell(v3(9,14,g-5,17,64,g+1), beam);
+    if (FRONT) putShell([[17.0,16,g-3.6],[17.2,61,g-1.4]], fill(pd([[17.1,16,g-3.5],[17.1,61,g-3.5],[17.1,61,g-1.5],[17.1,16,g-1.5]]), '#24282a') + ink(pd([[17.12,16,g-3.5],[17.12,61,g-3.5]], false), .5));
+  }
+  // X motor cover (right end, camera inside)
+  slS(18,2,31,16,g-6,g+6,2.5,CASEM);
+  if (FRONT){
+    let cv = '';
+    cv += fill(pd(on(PX(31.06), ellUV(6.5, g-3.2, 1.7, 1.7, 14))), '#1d2224');
+    cv += fill(pd(on(PX(31.10), ellUV(6.5, g-3.2, .8, .8, 12))), '#3c4d5b');
+    cv += `<circle cx="${f(P(31.14,8.4,g-1.4)[0])}" cy="${f(P(31.14,8.4,g-1.4)[1])}" r="${f(.7*INK_K)}" fill="${GREEN}"/>`;
+    putShell([[31,4,g-5],[31.4,12,g+1]], cv);
+  }
+  if (FRONT) putShell([[30.9,3,g+1.2],[31.3,15,g+5.2]], tx(31.06, 9, g+3.2, 'Bambu Lab  A1 mini', 1.3, GREYM.d, 800));
+
+  /* ---------- toolhead ---------- */
+  const TH = { x0:23, x1:35, y0:ty-6, y1:ty+6, z0:g-18, z1:g+1 };
+  slS(TH.x0,TH.y0,TH.x1,TH.y1,TH.z0,TH.z1,2.5,CASEM);
+  if (FRONT){
+    putShell([[35,ty-4.6,g-17.2],[35.6,ty+4.6,g-1]], shape(on(PX(35.06), rrUV(ty-4.4,g-17,ty+4.4,g-1.2,1.8)), CASEM.l, .9));
+    let win = fill(pd(on(PX(35.16), ellUV(ty, g-4.0, 3.35, 3.35, 22))), '#252a2c');
+    win += ink(pd(on(PX(35.17), ellUV(ty, g-4.0, 3.35, 3.35, 22))), .9);
+    win += ink(pd(on(PX(35.18), ellUV(ty, g-4.0, 2.6, 2.6, 18))), .5);
+    win += fill(pd(on(PX(35.19), ellUV(ty, g-4.0, 1.0, 1.0, 12))), GOLDM.l);
+    win += tx(35.22, ty, g-8.6, 'Bambu Lab', .82, GREYM.d, 800);
+    win += fill(pd(on(PX(35.20), ellUV(ty, g-4.2, 1.45, 1.45, 14))), GOLDM.l);
+    win += ink(pd(on(PX(35.22), ellUV(ty, g-4.2, 1.45, 1.45, 14))), .5);
+    win += `<path d="${pd([[35.24,ty-1.1,g-4.2],[35.24,ty+1.1,g-4.2]], false)}" stroke="${GOLDM.d}" stroke-width=".5"/>`;
+    putShell([[35,ty-2,g-6],[35.4,ty+2,g-2]], win);
+    putShell([[35.05,ty-3,g-16.2],[35.4,ty+3,g-14.6]], tx(35.3, ty, g-15.4, 'Bambu Lab', 1.0, GREYM.d, 800));
+    const filLed = (st.loaded || st.fil > 0) ? GREEN : '#4a4f4c';
+    putHard([[35.2,ty+3.4,g-2.1],[35.5,ty+4.2,g-1.3]], `<circle cx="${f(P(35.36,ty+3.8,g-1.7)[0])}" cy="${f(P(35.36,ty+3.8,g-1.7)[1])}" r="${f(.62*INK_K)}" fill="${filLed}" stroke="${INK}" stroke-width=".5"/>`);
+  }
+  // top hump + five-way hub
+  slS(25,ty-3,31,ty+3,g+1,g+5,2,DARKM);
+  bxS(26,ty-2,g+5,30,ty+2,g+7,DARKM,tone,1);
+  putShell(v3(26.5,ty-1.4,g+7,29.5,ty+1.4,g+8.2), cyl(28,ty,g+7,g+8.2,1.5,GREYM,tone,1,14));
+  // cutter lever on the right side
+  bxS(33,ty-6.7,g-3,36,ty-5.9,g+.5,DARKM,tone,1);
+  // fan shroud + silicone sock (shell: fades in see-through)
+  bxS(26,ty-5,g-19.4,34,ty+5,g-16.6,DARKM,tone,.9);
+  for (const dy of [-3.4,3.4]) bxS(30,ty+dy-1.2,g-20.0,34,ty+dy+1.2,g-17.4,DARKM,tone,.8);
+  bxS(31,ty-2.4,g-18.8,35,ty+2.4,g-16.2,RUBB,toneI,.8);
+  // PTFE coupler on the hub
+  putShell(v3(27.4,ty-1, g+8.2, 28.6, ty+1, g+9.4), cyl(28,ty,g+8.2,g+9.4,1.2,matOf('#4f7d93'),tone,1,12));
+
+  /* ---------- bed (Y carriage, heatbed, plate) ---------- */
+  slH(14+bd,24,55+bd,56,9.2,11.4,2,BEDM,toneI,1);
+  slH(18+bd,22,54+bd,58,11.4,BED_TOP,2,BEDM,toneI,1);
+  // bare heatbed detail when there is no plate
+  if (!st.plate && st.phase !== 'fitting'){
+    if (UP){
+      let bd2 = '';
+      for (const [mx,my] of [[22,26],[50,26],[22,54],[50,54]]) bd2 += fill(pd(on(PZ(BED_TOP+.03), ellUV(mx+bd,my,1.7,1.7,12))), '#23282b');
+      bd2 += ink(pd(on(PZ(BED_TOP+.04), rrUV(20+bd,24,52+bd,56,2))), .6);
+      putHard([[18+bd,22,BED_TOP],[54+bd,58,BED_TOP+.1]], bd2);
+    }
+  }
+  // spring steel PEI plate (with the slide-in animation)
+  if (st.plate || st.phase === 'fitting'){
+    const po = st.plateSlide || 0;
+    const plateSvg = slab(17.4+bd+po,21.4,54.6+bd+po,58.6,PLATE_TOP-.9,PLATE_TOP,2,PLATEM,toneI,1)
+      + box(54.6+bd+po,34,PLATE_TOP-1,58.4+bd+po,46,PLATE_TOP-.15,DARKM,toneI,.8);
+    putHard(v3(17.4+bd,21.4,PLATE_TOP-1,58.4+bd,58.6,PLATE_TOP), act('plate', plateSvg));
+    if (UP) putHard([[18+bd,22,PLATE_TOP],[54+bd,58,PLATE_TOP+.1]],
+      ink(pd(on(PZ(PLATE_TOP+.04), rrUV(18.6+bd,22.6,53.4+bd,57.4,2))), .6)
+      + fill(pd(on(PZ(PLATE_TOP+.05), rectUV(40+bd,50.5,50.5+bd,53.5))), GOLDM.l));
+    // build-plate detector light
+    putHard([[55.5+bd,20.6,PLATE_TOP-.6],[57.5+bd,22.4,PLATE_TOP+.2]],
+      `<circle cx="${f(P(56.5+bd,21.5,PLATE_TOP)[0])}" cy="${f(P(56.5+bd,21.5,PLATE_TOP)[1])}" r="${f(.9*INK_K)}" fill="${GREEN}" stroke="${INK}" stroke-width=".6"/>`);
+  }
+  // probe dots while the 6x6 height map is measured
+  if (st.phase === 'leveling' && st.probe > 0 && st.plate){
+    let dots = '', grid = '';
+    for (let yy of GRID_Y) grid += pd([[GRID_X[0]+bd, yy, PLATE_TOP+.16],[GRID_X[5]+bd, yy, PLATE_TOP+.16]], false);
+    for (let xx of GRID_X) grid += pd([[xx+bd, GRID_Y[0], PLATE_TOP+.16],[xx+bd, GRID_Y[5], PLATE_TOP+.16]], false);
+    for (let i=0; i<Math.min(36, st.probe); i++){
+      const gx = GRID_X[i%6], gy = GRID_Y[Math.floor(i/6)];
+      const [X,Y] = P(gx+bd, gy, PLATE_TOP+.2);
+      dots += `<circle cx="${f(X)}" cy="${f(Y)}" r="${f(1.15*INK_K)}" fill="${GREEN}" stroke="${INK}" stroke-width=".5"/>`;
+    }
+    putHard(v3(GRID_X[0]+bd-1,GRID_Y[0]-1,PLATE_TOP,GRID_X[5]+bd+1,GRID_Y[5]+1,PLATE_TOP+.3),
+      `<path d="${grid}" fill="none" stroke="${GREEN}" stroke-width=".45" opacity=".55"/>` + dots);
+  }
+  // nozzle wiper strip on the bed's left edge
+  bxH(26+bd,58.4,PLATE_TOP-.7,36+bd,59.6,PLATE_TOP+.6,RUBB,toneI,.7);
+  // purge chute (fixed beside the bed)
+  slH(CHUTE_X0,CHUTE_Y0,CHUTE_X1,CHUTE_Y1,10.0,12.9,1.6,DARKM,toneI,1);
+  if (UP) putHard([[CHUTE_X0,CHUTE_Y0,12.7],[CHUTE_X1,CHUTE_Y1,12.95]],
+    fill(pd(on(PZ(12.9), rrUV(CHUTE_X0+1.2,CHUTE_Y0+1,CHUTE_X1-1.2,CHUTE_Y1-1,1))), '#171a1b')
+    + ink(pd(on(PZ(12.92), rrUV(CHUTE_X0+1.2,CHUTE_Y0+1,CHUTE_X1-1.2,CHUTE_Y1-1,1))), .5));
+  // a small waste ledge with a status stripe
+  if (LEFT) putHard([[CHUTE_X0,CHUTE_Y1+.02,11],[CHUTE_X1,CHUTE_Y1+.08,12.7]], ink(pd([[CHUTE_X0+1,CHUTE_Y1+.06,12.3],[CHUTE_X1-1,CHUTE_Y1+.06,12.3]], false), .9));
+
+  // printed part (on the bed, or being taken off)
+  if ((st.part || st.prog > 0) && !st.deskPart){
+    let ox=0, oy=0, oz=0;
+    if (st.phase === 'removing'){
+      const t = ease(Math.min(1, st.removeT || 0));
+      ox = 34*t; oy = -20*t; oz = 7*Math.sin(Math.PI*t) - 13.2*t*t*t;
+    }
+    putHard(v3(28+bd+ox,31+oy,PLATE_TOP+oz,42+bd+ox,45+oy,PLATE_TOP+PART_H+oz),
+      boat(st, bd, ox, oy, oz));
+  }
+  if (st.deskPart) putHard(v3(61,10,0,77,26,16.3), boat({ ...st, prog:1, phase:'done' }, 0, 34, -20, -13.2));
+
+  // purge strand while loading / purging
+  if (st.purge > .02 && !st.loaded){
+    const zz = g - NOZ;
+    putHard(v3(34.5,ty-.4,zz-4,35.5,ty+.4,zz), wire([[35,ty,zz],[35,ty+.2,zz-1.4],[35,ty+.1,zz-3.2]], HOT, .7, 1));
+  }
+
+  /* ---------- spool + PTFE + cables ---------- */
+  // external spool: axle front-back, standing vertical behind the Z column
+  {
+    const sx = SPOOL.x, sy = SPOOL.y, sz = SPOOL.z, sr = SPOOL.r;
+    const back = sy - SPOOL.w/2, front = sy + SPOOL.w/2;
+    let sp = '';
+    // axle through the hub, with the retaining cap on the visible face
+    sp += cylY(back, front, sx, sz, 1.15, DARKM, toneI, .8, 14);
+    // back flange, wound filament, front flange
+    sp += cylY(back, back+2, sx, sz, sr, DARKM, toneI, 1.1, 34);
+    sp += cylY(back+2, front-2, sx, sz, sr-2.2, { l:'#f2ecdd', m:'#ddd4bf', d:'#b3aa95' }, toneI, 1.0, 34);
+    sp += cylY(front-2, front, sx, sz, sr, DARKM, toneI, 1.1, 34);
+    // perforated front flange face
+    if (facing([0,1,0])){
+      const cf = front + .03;
+      sp += fill(pd(on(PY(cf), ellUV(sx, sz, sr, sr, 34))), DARKM.l);
+      sp += ink(pd(on(PY(cf+.01), ellUV(sx, sz, sr, sr, 34))), .9);
+      sp += ink(pd(on(PY(cf+.02), ellUV(sx, sz, sr-2.2, sr-2.2, 34))), .5);
+      for (let i=0;i<20;i++){ const a=(st.spin||0)+i*Math.PI*2/20;
+        sp += fill(pd(on(PY(cf+.03), ellUV(sx+(sr-4.4)*Math.cos(a), sz+(sr-4.4)*Math.sin(a), 1.15,1.15,10))), '#a7adaa'); }
+      for (let i=0;i<8;i++){ const a=(st.spin||0)+i*Math.PI/4 + .2;
+        sp += fill(pd(on(PY(cf+.04), ellUV(sx+10*Math.cos(a), sz+10*Math.sin(a), 1.7,1.7,12))), '#262b2d'); }
+      sp += fill(pd(on(PY(cf+.05), ellUV(sx, sz, 3.5,3.5,16))), '#efe9d8');
+      sp += ink(pd(on(PY(cf+.06), ellUV(sx, sz, 3.5,3.5,16))), .7);
+      sp += fill(pd(on(PY(cf+.07), ellUV(sx, sz, 1.4,1.4,12))), '#24292b');
+      // axle end and its cap, sticking out of the hub
+      sp += cylY(cf+.02, cf+2.4, sx, sz, 1.5, DARKM, toneI, .6, 14);
+      let spokes=''; for (let i=0;i<6;i++){ const a=i*Math.PI/3;
+        spokes += pd([[sx+4*Math.cos(a), cf+.04, sz+4*Math.sin(a)],[sx+(sr-4)*Math.cos(a), cf+.04, sz+(sr-4)*Math.sin(a)]], false); }
+      sp += `<path d="${spokes}" stroke="${DARKM.d}" stroke-width=".7" opacity=".75" fill="none"/>`;
+    } else if (facing([0,-1,0])){
+      sp += fill(pd(on(PY(back-.02), ellUV(sx, sz, 3.3,3.3,16))), '#24292b');
+    }
+    putHard(v3(sx-sr-1, back-1, sz-sr-1, sx+sr+1, front+2.6, sz+sr+1), act('spool', sp));
+  }
+  // PTFE tube: coupler on the spool side -> toolhead (moves with the toolhead)
+  const tubePts = curve([[28,-2,66],[26,6,69],[29,18,65],[33,28,60],[30,ty,54],[28,ty,g+9.2]], 7);
+  const tubeCl = (a,b) => v3(Math.min(...a.map(p=>p[0])),Math.min(...a.map(p=>p[1])),Math.min(...a.map(p=>p[2])),
+                             Math.max(...a.map(p=>p[0])),Math.max(...a.map(p=>p[1])),Math.max(...a.map(p=>p[2])));
+  const outerCol = '#dfe6e2';
+  for (const [a,b] of [[0,.36],[.33,.68],[.65,1]]){
+    const seg = partOf(tubePts,a,b);
+    putHard(tubeCl(seg), wire(seg, outerCol, 1.9));
+  }
+  // filament inside the tube
+  if (st.loaded || st.fil > 0){
+    const fr = st.loaded ? 1 : (st.fil || 0);
+    if (fr > .02){ const fsg = partOf(tubePts, 0, fr);
+      baseP.push({ box: tubeCl(fsg), svg: wire(fsg, HOT, .55, 1.3), shell:false }); }
+  }
+
+  // ribbon cable from toolhead to the column, then down
+  const cabPts = curve([[24,ty-6,g+2],[22,ty-12,g+12],[18,ty-15,g+20],[21.9,22,60],[21.8,12,40],[21.6,9,17],[17,8,11]], 7);
+  for (const [a,b] of [[0,.34],[.32,.66],[.64,1]]){
+    const seg = partOf(cabPts,a,b);
+    putHard(tubeCl(seg), wire(seg, '#26292a', 1.7));
+  }
+  // mains cord from the back down to the desk
+  putHard(v3(-12,60,0,2,66,6), wire([[1,63,5],[0,66,2.5],[-3,70,1],[-7,74,1],[-11,77,1]], '#2b2b29', 1.5, 2.6));
+
+  /* ---------- internals: Z (above the bed, inside the column) ---------- */
+  bxT(11,8,4,17,14,11,DARKM);
+  putTop(v3(13.4,10.4,11,14.6,11.6,13.6), cyl(14,11,11,13.6,1.5,METAL,toneI,.8,16));
+  putTop(v3(13,10,13.5,15,12,71), rod([14,11,13.5],[14,11,71],.85,METAL,toneI,.8));
+  { let sp=''; for (let i=0;i<=80;i++){ const a=i/80*Math.PI*2*14; sp += pd([[14+1.15*Math.cos(a),11+1.15*Math.sin(a),14.5+i/80*55]], false); }
+    putTop(v3(12.6,9.6,14,15.4,12.4,70), `<path d="${sp}" fill="none" stroke="${METAL.d}" stroke-width=".35" opacity=".8"/>`); }
+  putTop(v3(12,9,g-3,16,13,g-1), box(12,9,g-3,16,13,g-1,GOLDM,toneI,.6));
+  bxT(20.7,9,12,21.9,13,72,METAL);
+  bxT(17.5,9,g-3.5,21,17,g+3.5,GREYM);
+
+  /* ---------- internals: X ---------- */
+  bxT(17.1,16,g-3.5,18.5,62,g-2.2,METAL);
+  bxT(18.4,ty-4,g-5,24,ty+4,g+3,GREYM);              // X carriage joining rail to toolhead
+  putTop(v3(17.5,12,g-4.4,18.3,62,g-1.2), wire([[17.9,13,g-1.4],[17.9,62,g-1.4]],'#202425',.5) + wire([[17.9,13,g-3.9],[17.9,62,g-3.9]],'#202425',.5));
+  bxT(19,4,g-4,26,11,g+2,DARKM);
+  putTop(v3(17,7,g-2.5,19,9.2,g+1.5), cyl(18,8,g-2.5,g+1.5,1.4,GOLDM,toneI,.7,14));
+  // camera module inside the motor cover
+  bxT(27,4,g-4.2,30,9,g-1,PCBM);
+  putTop(v3(29.8,5.4,g-3.4,31.1,7.6,g-1.6), cylX(29.8,31.1,6.5,g-2.5,1.05,DARKM,toneI,.7,14));
+  putTop(v3(30.9,7.8,g-1.9,31.2,8.5,g-1.2), `<circle cx="${f(P(31.05,8.15,g-1.55)[0])}" cy="${f(P(31.05,8.15,g-1.55)[1])}" r="${f(.6*INK_K)}" fill="${GREEN}"/>`);
+  bxT(14,59,g-3,18,63,g+3,GREYM);
+
+  /* ---------- internals: Y (under the bed) ---------- */
+  bxM(10,34,7.4,58,42,8.9,METAL);
+  putMech(v3(9,32,7.2,59,44,8.8), wire([[10,34,8.1],[58,34,8.1]],'#232725',.45) + wire([[10,37,8.1],[58,37,8.1]],'#232725',.45));
+  for (const px of [10,58]) putMech(v3(px-2,32,6.8,px+2,39,9.2), cyl(px,35.5,6.8,9.2,2,GOLDM,toneI,.7,14));
+  bxM(4,30,3.5,11,38,9.5,DARKM);
+  // 3 levelling screws + springs under the bed
+  for (const [sx,sy] of [[24,28],[48,28],[36,52]]){
+    let sp=''; for (let i=0;i<=12;i++) sp += pd([[sx+(i%2?1.2:-1.2), sy, 9.5+i*.13]], false);
+    putMech(v3(sx-1.5,sy-1,9.3,sx+1.5,sy+1,11.3), ink(pd([[sx,sy,9.2],[sx,sy,11.4]], false),1.2)
+      + `<path d="${sp}" fill="none" stroke="${METAL.m}" stroke-width=".7"/>`);
+  }
+  // heater coil + magnets shown over the plate in the x-ray
+  { let hc=''; for (let yy=24; yy<=56; yy+=4) hc += pd([[20+bd,yy,BED_TOP+.06],[52+bd,yy,BED_TOP+.06]], false);
+    const hotc = st.bedT > 40 ? '#ff6a2a' : '#8a4a2c';
+    putTop(v3(18+bd,22,BED_TOP,54+bd,58,BED_TOP+.2), `<path d="${hc}" fill="none" stroke="${hotc}" stroke-width=".55" opacity=".8"/>`); }
+  for (const [mx,my] of [[22,26],[50,26],[22,54],[50,54]]) putTop(v3(mx+bd-1.4,my-1.4,BED_TOP-.1,mx+bd+1.4,my+1.4,BED_TOP+.1), fill(pd(on(PZ(BED_TOP+.12), ellUV(mx+bd,my,1.3,1.3,10))), '#2a2f31'));
+
+  /* ---------- internals: toolhead ---------- */
+  bxT(24,ty+2,g-5,30,ty+5.5,g+1,DARKM);              // extruder motor
+  for (const dy of [-1.4,1.4]) putTop(v3(27,ty+dy-1.1,g-4.2,30.4,ty+dy+1.1,g-1.8),
+    cylX(27,30.4,ty+dy,g-3,1.35,METAL,toneI,.6,14));
+  // filament path
+  putTop(v3(26,ty-.5,g-4,35.5,ty+.5,g+9), wire([[28,ty,g+9],[28,ty,g-3.6],[33.5,ty,g-8],[35,ty,g-14.5],[35,ty,g-20.4]], st.loaded?'#e78d3a':'#5a5f5c', .55));
+  // hotend: heatsink fins, heatbreak, heater block, nozzle
+  bxT(31,ty-1.8,g-16,34,ty+1.8,g-11.5,METAL);
+  { let fins=''; for (let z=g-15.4; z<=g-11.8; z+=.7) fins += pd([[31.1,ty-1.9,z],[33.9,ty-1.9,z]], false) + pd([[31.1,ty+1.9,z],[33.9,ty+1.9,z]], false);
+    putTop(v3(31,ty-2,g-15.6,34,ty+2,g-11.6), `<path d="${fins}" fill="none" stroke="${METAL.d}" stroke-width=".4"/>`); }
+  bxT(32.4,ty-1, g-17.4, 34.2, ty+1, g-15.8, GOLDM);
+  bxT(31.2,ty-2.2,g-19.4,35,ty+2.2,g-17.2,GOLDM);
+  putTop(v3(34,ty-.9,g-20.8,35.8,ty+.9,g-18.8), rod([34.4,ty,g-19.2],[35,ty,g-20.4],1.0,METAL,toneI,.7,.45,12));
+  // 5015 part-cooling blower + ducts
+  bxT(24,ty-5.6,g-8.5,29,ty-1.2,g-4,DARKM);
+  putTop(v3(23.9,ty-5.4,g-8.2,24.2,ty-1.4,g-4.2), fill(pd(on(PX(23.95), ellUV(ty-3.4,g-6.2,1.5,1.5,14))), '#202426') + ink(pd(on(PX(23.97), ellUV(ty-3.4,g-6.2,1.5,1.5,14))), .5));
+  for (const dy of [-3.4,3.4]) bxT(29,ty+dy-1.1,g-11.2,34,ty+dy+1.1,g-8.2,DARKM);
+  // hotend fan
+  bxT(28,ty+1.4,g-16,30.5,ty+5.4,g-11.6,DARKM);
+  putTop(v3(27.9,ty+1.5,g-15.8,28.2,ty+5.3,g-11.8), fill(pd(on(PX(28.05), ellUV(ty+3.4,g-13.7,1.6,1.6,14))), '#202426') + ink(pd(on(PX(28.07), ellUV(ty+3.4,g-13.7,1.6,1.6,14))), .5));
+  // five-way hub + feed sensor + cutter
+  bxT(26,ty-2,g+4.5,30,ty+2,g+7.4,DARKM);
+  for (const dy of [-1.1,0,1.1]) putTop(v3(27,ty+dy-.35,g+7.2,28,ty+dy+.35,g+9.4), cyl(27.5,ty+dy,g+7.2,g+9.2,.35,METAL,toneI,.4,8));
+  bxT(30,ty+2,g+1,32.5,ty+4,g+3,PCBM);
+  bxT(32.5,ty-6.4,g-2.5,35,ty-5.6,g+.6,METAL);
+  // top-of-toolhead accelerometer board
+  bxT(31,ty-1,g+5.2,33,ty+1,g+6,PCBM);
+
+  /* ---------- internals: electronics ---------- */
+  bxM(22,26,2.4,44,54,4.6,PCBM);
+  bxM(26,32,4.5,34,42,5.3,DARKM); bxM(36,30,4.5,41,38,5.2,DARKM); bxM(36,44,4.5,42,50,5.1,DARKM);
+  putMech(v3(22,26,4.6,44,54,5.5), `<path d="${pd([[24,28,5.1],[42,28,5.1],[42,52,5.1]], false)}" stroke="${PCBM.l}" stroke-width=".35" opacity=".9" fill="none"/>`);
+  bxM(4,42,2.4,16,60,7.6,GREYM);
+  { let v=''; for (let yy=45; yy<=57; yy+=2.2) v += pd([[16.05,yy,3.4],[16.05,yy,6.6]], false);
+    putMech(v3(16,42,3,16.3,60,7), `<path d="${v}" fill="none" stroke="${INK}" stroke-width=".4" opacity=".5"/>`); }
+  bxM(3.5,58,5,6,63,8,PCBM);
+  putMech(v3(3.4,58,5,6.3,63,8.2), `<path d="${pd([[4.2,60,7.4],[4.2,61.5,6.4],[5.2,61.5,7.4],[5.2,63,6.4]], false)}" stroke="${GOLDM.l}" stroke-width=".35" fill="none"/>`);
+  bxM(44,2.6,4.8,54,5,7,DARKM);
+
+  /* ---------- assemble ---------- */
+  let out = s;
+  if (k <= .001){
+    out += byDepth(baseP);
+  } else {
+    const op = 1 - .62*k;
+    out += byDepth(baseP.filter(p => p.shell).map(p => ({ ...p, svg: `<g opacity="${f(op)}">${p.svg}</g>` })));
+    out += `<g opacity="${f(k)}">${byDepth(mechP)}</g>`;     // parts under the bed (hidden by it)
+    out += byDepth(baseP.filter(p => !p.shell));               // bed, plate, part, spool, cables
+    out += `<g opacity="${f(k)}">${byDepth(mechTop)}</g>`;   // gantry, toolhead, heater, electronics above
+  }
+
+  // labels
+  if (k > .6){
+    out += cnCallouts([
+      { at:[32,ty,g-14],             text:'热端',      on: st.nozzleT > 100 },
+      { at:[35,ty,g-21],             text:'喷嘴 0.4',  on: st.nozzleT > 100 },
+      { at:[28,ty,g-3],              text:'挤出轮',    on: st.phase === 'loading' || st.phase === 'printing' },
+      { at:[26,ty-4,g-7],            text:'部件风扇',  on: st.phase === 'printing' },
+      { at:[18,50,g-3],              text:'X 线轨',    on: st.phase === 'printing' },
+      { at:[23,8,g-1],               text:'X 电机',    on: st.phase === 'printing' },
+      { at:[14,11,55],               text:'Z 丝杠',    on: st.phase === 'leveling' || st.phase === 'printing' },
+      { at:[57,38,8.6],              text:'Y 导轨',    on: st.phase === 'printing' },
+      { at:[57.5,36,8.2],            text:'Y 同步带',  on: st.phase === 'printing' },
+      { at:[36+bd,58.2,12.1],        text:'热床',      on: st.bedT > 40 },
+      { at:[46+bd,44,PLATE_TOP],     text:'打印板',    on: st.plate },
+      { at:[33,40,3.6],              text:'主控板',    on: false },
+      { at:[10,51,5],                text:'电源',      on: false },
+      { at:[SPOOL.x+2,SPOOL.y,SPOOL.z-6], text:'料盘',  on: st.phase === 'loading' },
+      { at:[29,20,63],               text:'PTFE 管',   on: st.phase === 'loading' },
+      { at:[30,61,11.5],             text:'吐料槽',    on: st.phase === 'loading' || st.purge > 0 },
+      { at:[31+bd,59,PLATE_TOP],     text:'擦嘴条',    on: st.phase === 'leveling' } ], [-3,66,-6,74,0,80]);
+  } else {
+    out += cnTag([36+bd,38,PLATE_TOP+.1], 26, 18, '打印板', st.plate)
+         + cnTag([SPOOL.x,SPOOL.y,SPOOL.z], 26, -8, '料盘', false)
+         + cnTag([61,54,15], -22, -4, '屏幕', false)
+         + cnTag([30,ty,g-8], 18, -12, '工具头', st.phase === 'printing');
+  }
+  return out;
+}
+
+/* ---------- behaviour ---------- */
+const PHASES = ['fitting','loading','leveling','printing','removing'];
+function busy(){ return PHASES.indexOf(ui.st.phase) >= 0; }
+function now(){ return performance.now(); }
+function say(st, key, text, ms){ if (st.said[key]) return; st.said[key] = 1; ui.flash(text, ms || 2600); }
+function resetSaid(st){ st.said = {}; }
+
+function stepSim(st, t, dt){
+  const el = t - st.t0;
+
+  if (st.phase === 'fitting'){
+    const d = Math.min(1, el/650);
+    st.plateSlide = 11*(1-ease(d));
+    if (d >= 1){ st.plateSlide = 0; st.plate = true; st.phase = 'idle'; say(st,'plate','打印板磁吸到位 · 打印板检测通过'); }
+  }
+
+  else if (st.phase === 'loading'){
+    st.nozzleT = Math.min(250, 25 + 225*Math.min(1, el/1800));
+    if (el < 900){
+      const e = ease(Math.min(1, el/900));
+      st.ty = lerp(st.ty0, 60, e); st.g = lerp(st.g0, 36, e);
+    } else {
+      st.ty = 60; st.g = 36;
+      st.fil = Math.min(1, (el-900)/2800);
+      st.spin = (st.spin || 0) + dt*2.4;
+    }
+    if (el > 500) say(st,'ld0','工具头亮绿灯 → 屏幕点「进料」并选择耗材');
+    if (el > 1800) say(st,'ld1','喷嘴 250℃（高温勿触碰）· 再次推入耗材，等正常吐料');
+    if (el > 4000) st.purge = Math.min(1, (el-4000)/450);
+    if (el > 4500){ st.loaded = true; say(st,'ld2','吐料正常 → 屏幕点「完成」'); }
+    if (el > 5300){
+      const e = ease(Math.min(1, (el-5300)/700));
+      st.ty = lerp(60, 34, e); st.g = lerp(36, G_IDLE, e);
+      st.nozzleT = lerp(250, 25, e);
+      st.purge = Math.max(0, 1-e);
+      if (el > 6000){ st.phase = 'idle'; st.fil = 1; st.spin = 0; st.nozzleT = 25; st.g = G_IDLE; st.ty = 34; say(st,'load','进料完成 · 喷嘴正常吐料'); }
+    }
+  }
+
+  else if (st.phase === 'leveling'){
+    st.bedT = 25; st.nozzleT = Math.min(180, 25+155*Math.min(1, el/900));
+    if (el < 320){
+      const e = ease(el/320); st.ty = lerp(st.ty0, GRID_Y[0], e); st.bedX = lerp(st.bedX0, 35-GRID_X[0], e); st.g = lerp(st.g0, G_TOUCH, e);
+    } else if (el < 320 + 36*110){
+      const i = Math.floor((el-320)/110);
+      const row = Math.floor(i/6), col = i%6;
+      const gy = GRID_Y[row], gx = GRID_X[col];
+      const e = ease(Math.min(1, ((el-320)%110)/110));
+      st.ty = lerp(st.ty, gy, Math.min(1, dt*20));
+      st.bedX = lerp(st.bedX, 35-gx, Math.min(1, dt*20));
+      st.g = G_TOUCH + .5*Math.sin(e*Math.PI);
+      st.probe = Math.min(36, i+1);
+    } else if (el < 320 + 36*110 + 1100){
+      const vt = el - (320 + 36*110);
+      st.g = G_TOUCH + 4;
+      st.bedX = Math.sin(vt*.055)*1.1;
+      st.ty = 38 + Math.sin(vt*.07)*.9;
+      st.probe = 36;
+    } else {
+      st.level = true; st.phase = 'idle'; st.probe = 36; st.g = G_IDLE; st.ty = 34; st.bedX = 0; st.nozzleT = 25;
+      say(st,'level','自动调平完成 · 36 点高度已补偿');
+    }
+  }
+
+  else if (st.phase === 'printing'){
+    st.nozzleT = Math.min(220, 25 + 195*Math.min(1, el/900));
+    st.bedT = Math.min(60, 25 + 35*Math.min(1, el/1200));
+    if (el < 700){
+      const e = ease(el/700);
+      st.ty = lerp(st.ty0, 59, e); st.g = lerp(st.g0, 36, e); st.bedX = lerp(st.bedX0, 0, e);
+    } else if (el < 1300){
+      const e = ease((el-700)/600);
+      st.ty = lerp(59, 34, e); st.g = G_TOUCH; st.bedX = 0;
+    } else if (el < 6700){
+      const p = Math.min(1, (el-1300)/5400);
+      st.prog = p;
+      st.bedX = -1 + 2.4*Math.sin(el*.014);
+      st.ty = 38 + 4.6*Math.sin(el*.011);
+      st.g = G_TOUCH + PART_H*p;
+      st.part = true;
+    } else if (el < 7600){
+      const e = ease((el-6700)/900);
+      st.prog = 1; st.bedX = lerp(0, 7, e); st.g = lerp(G_TOUCH+PART_H, G_IDLE, e);
+      st.ty = lerp(38, 34, e);
+    } else {
+      st.prog = 1; st.part = true; st.phase = 'done'; st.bedX = 0; st.ty = 34; st.g = G_IDLE;
+      st.nozzleT = 25; st.bedT = 25;
+      say(st,'done','打印完成 · 等热床冷却后再取模型');
+    }
+  }
+
+  else if (st.phase === 'removing'){
+    if (el < 700){
+      const e = ease(el/700); st.bedX = lerp(st.bedX0, 10, e); st.removeT = 0;
+    } else if (el < 2000){
+      st.bedX = 10;
+      st.removeT = Math.min(1, (el-700)/1300);
+    } else if (el < 2700){
+      const e = ease((el-2000)/700); st.bedX = lerp(10, 0, e); st.removeT = 1;
+    } else {
+      st.phase = 'idle'; st.deskPart = true; st.part = false; st.prog = 0; st.bedX = 0; st.removeT = 0;
+      say(st,'rm','模型已取下 · 轻弯打印板即可脱模');
+    }
+  }
+}
+
+let loopOn = false;
+function runLoop(){
+  if (loopOn) return; loopOn = true;
+  let last = performance.now();
+  ui.animate(() => {
+    const st = ui.st, t = performance.now(), dt = Math.min(.05, (t-last)/1000); last = t;
+    stepSim(st, t, dt);
+    const b = busy();
+    if (!b) loopOn = false;
+    return b;
+  });
+}
+
+function wait(){ ui.flash('先等这一步完成'); }
+function installPlate(){
+  const st = ui.st;
+  if (busy()) return wait();
+  if (st.plate) return ui.flash('打印板已经装好了');
+  st.phase = 'fitting'; st.t0 = now(); st.plateSlide = 11; resetSaid(st);
+  ui.flash('沿前缘推入打印板，磁铁会吸住');
+  runLoop();
+}
+function loadFilament(){
+  const st = ui.st;
+  if (busy()) return wait();
+  if (!st.plate) return ui.flash('先按「1 装打印板」，免得料条落到热床上');
+  if (st.loaded) return ui.flash('耗材已经装好了');
+  st.phase = 'loading'; st.t0 = now(); st.ty0 = st.ty; st.g0 = st.g; st.fil = 0; st.purge = 0; resetSaid(st);
+  ui.flash('按绕线方向装好料盘 · 把耗材推入直到停住');
+  runLoop();
+}
+function calibrate(){
+  const st = ui.st;
+  if (busy()) return wait();
+  if (!st.plate) return ui.flash('先装打印板：喷嘴要直接触碰热床测高');
+  if (st.level) return ui.flash('已经调平过了');
+  st.phase = 'leveling'; st.t0 = now(); st.ty0 = st.ty; st.bedX0 = st.bedX; st.g0 = st.g; st.probe = 0; resetSaid(st);
+  ui.flash('喷嘴逐点触碰热床，共 36 点');
+  runLoop();
+}
+function startPrint(){
+  const st = ui.st;
+  if (busy()) return wait();
+  if (!st.plate) return ui.flash('先按「1 装打印板」');
+  if (!st.loaded) return ui.flash('先按「2 装载耗材」');
+  if (!st.level) return ui.flash('先按「3 自动调平」，否则首层会失败');
+  if (st.part) return ui.flash('先按「5 取下模型」');
+  st.deskPart = false; st.prog = 0; st.part = false; st.phase = 'printing'; st.t0 = now();
+  st.ty0 = st.ty; st.bedX0 = st.bedX; st.g0 = st.g; resetSaid(st);
+  ui.flash('热床 60℃ · 喷嘴 220℃ · 热床调平/流量校准已启用');
+  runLoop();
+}
+function removePart(){
+  const st = ui.st;
+  if (busy()) return wait();
+  if (!st.part || st.phase !== 'done') return ui.flash('还没有打印好的模型');
+  st.phase = 'removing'; st.t0 = now(); st.bedX0 = st.bedX; st.removeT = 0; resetSaid(st);
+  ui.flash('待打印板冷却 · 取下模型（粘牢时取下打印板轻弯脱模）');
+  runLoop();
+}
+
+/* ---------- mount ---------- */
+ui = mountFigure({
+  fig:'08', turn:'full', title:'拓竹 A1 mini 使用教程',
+  size:[76, 86, 102], center:[35, 39], palette:'mint',
+  state:{
+    phase:'idle', plate:false, loaded:false, level:false, part:false, deskPart:false,
+    prog:0, bedX:0, bedX0:0, ty:34, ty0:34, g:G_IDLE, g0:G_IDLE,
+    plateSlide:0, removeT:0, fil:0, purge:0, spin:0, probe:0,
+    nozzleT:25, bedT:25, said:{}
+  },
+  scene,
+  buttons:[
+    { label:'1 装打印板', onClick: installPlate },
+    { label:'2 装载耗材', onClick: loadFilament },
+    { label:'3 自动调平', onClick: calibrate },
+    { label:'4 开始打印', onClick: startPrint },
+    { label:'5 取下模型', onClick: removePart }
+  ],
+  stats: st => [
+    { label:'喷嘴', value: Math.round(st.nozzleT)+'°' },
+    { label:'热床', value: Math.round(st.bedT)+'°' },
+    { label:'进度', value: Math.round(st.prog*100)+'%', small:true }
+  ],
+  acts:{
+    plate: st => installPlate(),
+    spool: st => loadFilament(),
+    screen: st => startPrint()
+  },
+  params:(st,q) => {
+    if (q.get('plate') === '1') st.plate = true;
+    if (q.get('loaded') === '1'){ st.loaded = true; st.fil = 1; }
+    if (q.get('level') === '1') st.level = true;
+    if (q.has('prog')){
+      st.prog = Math.max(0, Math.min(1, +q.get('prog')));
+      st.part = st.prog > 0;
+      st.phase = st.prog >= 1 ? 'done' : 'printing';
+      st.g = G_TOUCH + PART_H*st.prog;
+      st.ty = 38; st.bedX = 0;
+    }
+    if (q.has('ty')) st.ty = +q.get('ty');
+    if (q.has('g')) st.g = +q.get('g');
+    if (q.has('bd')) st.bedX = +q.get('bd');
+    if (q.get('nozzleT')) st.nozzleT = +q.get('nozzleT');
+    if (q.get('bedT')) st.bedT = +q.get('bedT');
+    if (q.get('desk') === '1'){ st.deskPart = true; st.plate = true; }
+    if (q.has('stage')){
+      const g = q.get('stage');
+      if (g === 'fitting'){ st.phase = 'fitting'; st.plateSlide = +(q.get('slide') || 6); }
+      if (g === 'loading'){ st.plate = true; st.phase = 'loading'; st.ty = 60; st.g = 36; st.nozzleT = 250;
+        st.fil = +(q.get('fil') || .65); st.spin = 1.2; st.purge = +(q.get('purge') || 0); st.loaded = false; }
+      if (g === 'leveling'){ st.plate = true; st.phase = 'leveling'; st.probe = +(q.get('probe') || 18);
+        const i = Math.max(0, st.probe - 1); st.bedX = 35 - GRID_X[i % 6]; st.ty = GRID_Y[Math.floor(i / 6)]; st.g = G_TOUCH; }
+      if (g === 'removing'){ st.plate = true; st.loaded = true; st.level = true; st.prog = 1; st.part = true;
+        st.phase = 'removing'; st.removeT = +(q.get('t') || .6); st.bedX = 10; st.g = G_IDLE; st.ty = 34; }
+    }
+  }
+});
+xrMount(() => ui, () => '');
+
+/* page language: the engine's chrome, in Chinese */
+(function(){
+  const set = (sel, txt) => { const e = document.querySelector(sel); if (e) e.textContent = txt; };
+  set('header h1', '图 08 — 拓竹 A1 mini 使用教程');
+  const labels = document.querySelectorAll('.ctl > label');
+  if (labels[0]) labels[0].textContent = '手绘抖动';
+  if (labels[1]) labels[1].textContent = '配色';
+  if (labels[2]) labels[2].textContent = '视角';
+  set('#vreset', '正面');
+  set('#vspin', '转台');
+  set('#xrb', '透视');
+  set('#lblb', '标签');
+  const sw = { mustard:'芥黄', tomato:'番茄', mint:'薄荷', cobalt:'钴蓝', blush:'藕粉' };
+  document.querySelectorAll('#pals .sw').forEach(b => { if (sw[b.title]) b.title = sw[b.title]; });
+  const foot = document.querySelector('.made-with');
+  if (foot) foot.innerHTML = '<a href="https://april-zhu.com/colorfigures" target="_blank" rel="noopener">图解引擎 Colorfigures</a>';
+})();
+})();
+</script>
+</body></html>

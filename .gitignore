@@ -1,0 +1,18 @@
+# 测试截图与临时页面
+a1mini/shots/
+
+# 迭代备份
+*.save.html
+a1mini/figure.before-*.html
+
+# 参考资料中的大文件（PDF、图片、整站存档）
+a1mini/research/*.pdf
+a1mini/research/*.jpg
+a1mini/research/*.jpeg
+a1mini/research/*.png
+a1mini/research/product.html
+a1mini/research/site/
+
+# 系统文件
+Thumbs.db
+.DS_Store
