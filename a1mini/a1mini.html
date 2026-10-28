@@ -710,7 +710,7 @@ const CREAMM = { l:'#f8f4e5', m:'#e6e0cc', d:'#bfb7a0' };
 const CHUTE_Y0 = 59.8, CHUTE_Y1 = 65, CHUTE_X0 = 24, CHUTE_X1 = 36;
 const GRID_X = [28, 30.8, 33.6, 36.4, 39.2, 42];
 const GRID_Y = [24, 29.6, 35.2, 40.8, 46.4, 52];
-const SPOOL = { x:33, y:-7, z:46, r:21, w:12 };   // 外挂料盘：轴向前后，竖立在 Z 轴立柱后面
+const SPOOL = { x:33, y:-27, z:58, r:21, w:12 };   // 外挂料盘：轴向前后，悬在 Z 立柱后方、机身之外
 
 let ui;
 const baseP = [], mechP = [], mechTop = [];
@@ -1095,10 +1095,16 @@ function scene(st, m){
     } else if (facing([0,-1,0])){
       sp += fill(pd(on(PY(back-.02), ellUV(sx, sz, 3.3,3.3,16))), '#24292b');
     }
+    // one holder arm: a clamp on the back corner of the Z column, reaching back to the hub
+    sp += box(19.4, 3.2, sz-1.6, 21.6, 5.8, sz+1.6, GREYM, toneI, .8);
+    const aA=[21,4.9,sz-1.5], aB=[sx,front+2.4,sz-1.5], aC=[sx,front+2.4,sz+1.5], aD=[21,4.9,sz+1.5];
+    const armQ = pd([aA,aB,aC,aD]);
+    sp += fill(armQ, GREYM.d) + ink(armQ, 1.5);
+    sp += ink(pd([aD,aC], false), 1.2);
     putHard(v3(sx-sr-1, back-1, sz-sr-1, sx+sr+1, front+2.6, sz+sr+1), act('spool', sp));
   }
   // PTFE tube: coupler on the spool side -> toolhead (moves with the toolhead)
-  const tubePts = curve([[28,-2,66],[26,6,69],[29,18,65],[33,28,60],[30,ty,54],[28,ty,g+9.2]], 7);
+  const tubePts = curve([[33,-30,81],[32,-18,79.6],[31,-4,73],[33,16,64],[30,ty,54],[28,ty,g+9.2]], 7);
   const tubeCl = (a,b) => v3(Math.min(...a.map(p=>p[0])),Math.min(...a.map(p=>p[1])),Math.min(...a.map(p=>p[2])),
                              Math.max(...a.map(p=>p[0])),Math.max(...a.map(p=>p[1])),Math.max(...a.map(p=>p[2])));
   const outerCol = '#dfe6e2';
@@ -1228,13 +1234,13 @@ function scene(st, m){
       { at:[46+bd,44,PLATE_TOP],     text:'打印板',    on: st.plate },
       { at:[33,40,3.6],              text:'主控板',    on: false },
       { at:[10,51,5],                text:'电源',      on: false },
-      { at:[SPOOL.x+2,SPOOL.y,SPOOL.z-6], text:'料盘',  on: st.phase === 'loading' },
+      { at:[SPOOL.x,SPOOL.y,SPOOL.z], text:'料盘',     on: st.phase === 'loading' },
       { at:[29,20,63],               text:'PTFE 管',   on: st.phase === 'loading' },
       { at:[30,61,11.5],             text:'吐料槽',    on: st.phase === 'loading' || st.purge > 0 },
       { at:[31+bd,59,PLATE_TOP],     text:'擦嘴条',    on: st.phase === 'leveling' } ], [-3,66,-6,74,0,80]);
   } else {
     out += cnTag([36+bd,38,PLATE_TOP+.1], 26, 18, '打印板', st.plate)
-         + cnTag([SPOOL.x,SPOOL.y,SPOOL.z], 26, -8, '料盘', false)
+         + cnTag([SPOOL.x+9,SPOOL.y,SPOOL.z+17], 16, -13, '料盘', false)
          + cnTag([61,54,15], -22, -4, '屏幕', false)
          + cnTag([30,ty,g-8], 18, -12, '工具头', st.phase === 'printing');
   }
