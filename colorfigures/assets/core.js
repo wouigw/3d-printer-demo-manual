@@ -60,7 +60,21 @@ const boxMid = b => [0,1,2].map(k => (b[0][k] + b[1][k]) / 2);
 const sepOrder = (p, q) => { if (!p.box || !q.box) return 0;
   for (let k = 0; k < 3; k++){ if (p.box[1][k] <= q.box[0][k] + 1e-6) return CAM_V[k] >= 0 ? -1 : 1; if (q.box[1][k] <= p.box[0][k] + 1e-6) return CAM_V[k] >= 0 ? 1 : -1; }
   return 0; };
-const byDepth = parts => parts.filter(Boolean).sort((p,q) => sepOrder(p,q) || (depthOf(p.at || boxMid(p.box)) - depthOf(q.at || boxMid(q.box)))).map(p => p.svg).join('');
+// sepOrder settles most pairs, but it is only a partial order: a merge can still leave two boxes the wrong way round
+// (at one turntable angle the print plate was painted under the base slab). A flat platform that sits entirely below
+// another box is always farther from a camera that looks down, so those pairs are put back in order after the sort.
+// Only the lower box has to be a platform: a small part hanging under a housing (the nozzle under the tool head) must
+// stay in front of it. The rule is a partial order, which sort() cannot take as a comparator, so it is an insertion pass.
+const flatSlab = b => b[1][2] - b[0][2] <= .25 * Math.sqrt(Math.max(.01, (b[1][0] - b[0][0]) * (b[1][1] - b[0][1])));
+const belowOrder = (p, q) => { if (!p.box || !q.box || !flatSlab(p.box)) return 0;
+  const r = p.box[1][2] <= q.box[0][2] + 1e-6 ? -1 : q.box[1][2] <= p.box[0][2] + 1e-6 ? 1 : 0;
+  return CAM_V[2] >= 0 ? r : -r; };
+const byDepth = parts => { const a = parts.filter(Boolean);
+  a.sort((p,q) => sepOrder(p,q) || (depthOf(p.at || boxMid(p.box)) - depthOf(q.at || boxMid(q.box))));
+  for (let j = 1; j < a.length; j++)
+    for (let i = 0; i < j; i++)
+      if (belowOrder(a[j], a[i]) < 0){ a.splice(i, 0, a.splice(j, 1)[0]); break; }
+  return a.map(p => p.svg).join(''); };
 // the half of a vertical ring that faces the viewer / is turned away, as [from, to] angles in degrees (0 = +x, 90 = +y)
 const nearHalf = () => [YAW - 90, YAW + 90], farHalf = () => [YAW + 90, YAW + 270];
 // an open container (cup, bin, cone, drum) between two rings: far inner wall, then its contents, then the near outer wall

@@ -16,3 +16,7 @@ a1mini/research/site/
 # 系统文件
 Thumbs.db
 .DS_Store
+
+# 宣传片工程（体量大，含生成素材）
+宣传片/
+vibe_images/
